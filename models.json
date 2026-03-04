@@ -1,8 +1,8 @@
 [
   {
-    "id": "gpt-5.3-codex",
+    "id": "gpt-5-codex",
     "object": "model",
-    "created": 1770307200,
+    "created": 1757894400,
     "owned_by": "openai"
   },
   {
@@ -48,9 +48,9 @@
     "owned_by": "openai"
   },
   {
-    "id": "gpt-5-codex",
+    "id": "gpt-5.3-codex",
     "object": "model",
-    "created": 1757894400,
+    "created": 1770307200,
     "owned_by": "openai"
   },
   {

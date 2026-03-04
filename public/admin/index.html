@@ -56,12 +56,12 @@
   </style>
 </head>
 <body class="bg-gray-50">
-  <div class="flex h-screen">
+  <div class="flex flex-col md:flex-row h-screen">
     <!-- Sidebar -->
-    <aside class="w-64 bg-white border-r border-gray-200 flex flex-col">
+    <aside class="w-full md:w-64 bg-white border-b md:border-b-0 md:border-r border-gray-200 flex flex-col">
       <!-- Logo -->
       <div class="p-6 border-b border-gray-200">
-        <div class="flex items-center justify-between">
+        <div class="flex flex-wrap items-center justify-between gap-3">
           <div class="flex items-center space-x-3">
             <div class="w-10 h-10 bg-blue-500 rounded-lg flex items-center justify-center">
               <i class="fas fa-cube text-white"></i>
@@ -78,31 +78,31 @@
       </div>
 
       <!-- Navigation -->
-      <nav class="flex-1 p-4 space-y-1">
-        <a href="#" onclick="switchPage(event, 'dashboard')" class="nav-item active flex items-center space-x-3 px-4 py-3 rounded-lg text-sm font-medium">
+      <nav class="flex-1 p-2 md:p-4 md:space-y-1 flex md:block gap-1 overflow-x-auto md:overflow-visible whitespace-nowrap">
+        <a href="#" data-page="dashboard" onclick="switchPage(event, 'dashboard')" class="nav-item active shrink-0 flex items-center space-x-3 px-4 py-3 rounded-lg text-sm font-medium">
           <i class="fas fa-chart-line w-5"></i>
           <span>仪表盘</span>
         </a>
-        <a href="#" onclick="switchPage(event, 'apikeys')" class="nav-item flex items-center space-x-3 px-4 py-3 rounded-lg text-sm font-medium text-gray-700">
+        <a href="#" data-page="apikeys" onclick="switchPage(event, 'apikeys')" class="nav-item shrink-0 flex items-center space-x-3 px-4 py-3 rounded-lg text-sm font-medium text-gray-700">
           <i class="fas fa-key w-5"></i>
           <span>API Keys</span>
         </a>
-        <a href="#" onclick="switchPage(event, 'accounts')" class="nav-item flex items-center space-x-3 px-4 py-3 rounded-lg text-sm font-medium text-gray-700">
+        <a href="#" data-page="accounts" onclick="switchPage(event, 'accounts')" class="nav-item shrink-0 flex items-center space-x-3 px-4 py-3 rounded-lg text-sm font-medium text-gray-700">
           <i class="fas fa-users w-5"></i>
           <span>账号管理</span>
         </a>
-        <a href="#" onclick="switchPage(event, 'analytics')" class="nav-item flex items-center space-x-3 px-4 py-3 rounded-lg text-sm font-medium text-gray-700">
+        <a href="#" data-page="analytics" onclick="switchPage(event, 'analytics')" class="nav-item shrink-0 flex items-center space-x-3 px-4 py-3 rounded-lg text-sm font-medium text-gray-700">
           <i class="fas fa-chart-bar w-5"></i>
           <span>数据分析</span>
         </a>
-        <a href="#" onclick="switchPage(event, 'settings')" class="nav-item flex items-center space-x-3 px-4 py-3 rounded-lg text-sm font-medium text-gray-700">
+        <a href="#" data-page="settings" onclick="switchPage(event, 'settings')" class="nav-item shrink-0 flex items-center space-x-3 px-4 py-3 rounded-lg text-sm font-medium text-gray-700">
           <i class="fas fa-cog w-5"></i>
           <span>系统设置</span>
         </a>
       </nav>
 
       <!-- User Menu -->
-      <div class="p-4 border-t border-gray-200">
+      <div class="hidden md:block p-4 border-t border-gray-200">
         <div class="flex items-center justify-between px-4 py-3">
           <div class="flex items-center space-x-3">
             <div class="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
@@ -123,17 +123,27 @@
     <!-- Main Content -->
     <main class="flex-1 overflow-auto">
       <!-- Header -->
-      <header class="bg-white border-b border-gray-200 px-8 py-4">
+      <header class="bg-white border-b border-gray-200 px-4 md:px-8 py-4">
         <div class="flex items-center justify-between">
           <div>
             <h2 class="text-2xl font-semibold text-gray-900" id="pageTitle">仪表盘</h2>
             <p class="text-sm text-gray-500 mt-1" id="pageDesc">系统概览和实时数据</p>
           </div>
+          <div class="flex items-center space-x-3">
+            <label class="inline-flex items-center space-x-2 text-sm text-gray-600">
+              <input id="autoRefreshToggle" type="checkbox" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+              <span>自动刷新</span>
+            </label>
+            <button id="manualRefreshBtn" onclick="refreshCurrentPageData()" class="px-3 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200 transition">
+              <i class="fas fa-rotate mr-2"></i>刷新
+            </button>
+          </div>
         </div>
       </header>
+      <div id="globalLoadingBar" class="h-0.5 bg-blue-500 opacity-0 transition-opacity duration-200"></div>
 
       <!-- Dashboard Page -->
-      <div id="dashboardPage" class="p-8">
+      <div id="dashboardPage" class="p-4 md:p-8">
         <!-- Stats Cards -->
         <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <div class="stat-card bg-white rounded-lg p-6 border border-gray-200 shadow-sm">
@@ -181,6 +191,88 @@
           </div>
         </div>
 
+        <div class="grid grid-cols-2 lg:grid-cols-6 gap-3 mb-8">
+          <div class="p-3 rounded-lg border border-gray-200 bg-white">
+            <p class="text-xs text-gray-500">启用 API Keys</p>
+            <p class="text-lg font-semibold text-gray-900" id="dashActiveApiKeys">0</p>
+          </div>
+          <div class="p-3 rounded-lg border border-gray-200 bg-white">
+            <p class="text-xs text-gray-500">禁用 API Keys</p>
+            <p class="text-lg font-semibold text-gray-900" id="dashDisabledApiKeys">0</p>
+          </div>
+          <div class="p-3 rounded-lg border border-gray-200 bg-white">
+            <p class="text-xs text-gray-500">Token 总数</p>
+            <p class="text-lg font-semibold text-gray-900" id="dashTotalTokens">0</p>
+          </div>
+          <div class="p-3 rounded-lg border border-gray-200 bg-white">
+            <p class="text-xs text-gray-500">冷却中 Token</p>
+            <p class="text-lg font-semibold text-amber-700" id="dashCoolingTokens">0</p>
+          </div>
+          <div class="p-3 rounded-lg border border-gray-200 bg-white">
+            <p class="text-xs text-gray-500">近 1 小时请求</p>
+            <p class="text-lg font-semibold text-gray-900" id="dashRequestsLastHour">0</p>
+          </div>
+          <div class="p-3 rounded-lg border border-gray-200 bg-white">
+            <p class="text-xs text-gray-500">近 24h 成功率</p>
+            <p class="text-lg font-semibold text-gray-900" id="dashSuccessRate24h">100%</p>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 xl:grid-cols-4 gap-6 mb-8">
+          <div class="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
+            <h3 class="text-base font-semibold text-gray-900 mb-4">
+              <i class="fas fa-gauge-high mr-2 text-blue-600"></i>核心请求指标
+            </h3>
+            <div class="space-y-3 text-sm">
+              <div class="flex items-center justify-between border-b border-gray-100 pb-2">
+                <span class="text-gray-600">近 24h 请求</span>
+                <span id="dashRequests24h" class="font-semibold text-gray-900">0</span>
+              </div>
+              <div class="flex items-center justify-between border-b border-gray-100 pb-2">
+                <span class="text-gray-600">近 24h 平均响应</span>
+                <span id="dashAvgLatency" class="font-semibold text-gray-900">0ms</span>
+              </div>
+              <div class="flex items-center justify-between">
+                <span class="text-gray-600">累计失败请求</span>
+                <span id="dashFailedRequests" class="font-semibold text-red-600">0</span>
+              </div>
+              <div class="flex items-center justify-between pt-2 border-t border-gray-100">
+                <span class="text-gray-600">累计估算消耗</span>
+                <span id="dashTokenConsumed" class="font-semibold text-indigo-700">0</span>
+              </div>
+              <div class="flex items-center justify-between">
+                <span class="text-gray-600">健康/异常账号</span>
+                <span class="font-semibold text-gray-900"><span id="dashHealthyTokens">0</span> / <span id="dashUnhealthyTokens" class="text-red-600">0</span></span>
+              </div>
+              <div class="flex items-center justify-between">
+                <span class="text-gray-600">自动封停账号</span>
+                <span id="dashAutoDisabledTokens" class="font-semibold text-amber-700">0</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
+            <h3 class="text-base font-semibold text-gray-900 mb-4">
+              <i class="fas fa-layer-group mr-2 text-emerald-600"></i>7天热门模型
+            </h3>
+            <ul id="dashTopModels"></ul>
+          </div>
+
+          <div class="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
+            <h3 class="text-base font-semibold text-gray-900 mb-4">
+              <i class="fas fa-diagram-project mr-2 text-indigo-600"></i>7天热门接口
+            </h3>
+            <ul id="dashTopEndpoints"></ul>
+          </div>
+
+          <div class="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
+            <h3 class="text-base font-semibold text-gray-900 mb-4">
+              <i class="fas fa-triangle-exclamation mr-2 text-rose-600"></i>风险 API Keys
+            </h3>
+            <ul id="dashRiskApiKeys"></ul>
+          </div>
+        </div>
+
         <!-- Recent Activity -->
         <div class="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
           <h3 class="text-lg font-semibold text-gray-900 mb-4">
@@ -192,33 +284,99 @@
             </div>
           </div>
         </div>
+
+        <!-- System Runtime -->
+        <div class="mt-8 bg-white rounded-lg border border-gray-200 shadow-sm p-6">
+          <h3 class="text-lg font-semibold text-gray-900 mb-4">
+            <i class="fas fa-heart-pulse mr-2 text-emerald-600"></i>系统运行状态
+          </h3>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+            <div class="p-4 rounded-lg border border-gray-200 bg-gray-50">
+              <p class="text-xs text-gray-500 mb-1">整体状态</p>
+              <p class="text-base font-semibold text-gray-900" id="runtimeStatus">--</p>
+            </div>
+            <div class="p-4 rounded-lg border border-gray-200 bg-gray-50">
+              <p class="text-xs text-gray-500 mb-1">Token 状态</p>
+              <p class="text-base font-semibold text-gray-900" id="runtimeTokens">--</p>
+            </div>
+            <div class="p-4 rounded-lg border border-gray-200 bg-gray-50">
+              <p class="text-xs text-gray-500 mb-1">代理并发</p>
+              <p class="text-base font-semibold text-gray-900" id="runtimeProxy">--</p>
+            </div>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-gray-600">
+            <div>运行时长：<span class="font-medium text-gray-900" id="runtimeUptime">--</span></div>
+            <div>负载策略：<span class="font-medium text-gray-900" id="runtimeStrategy">--</span></div>
+            <div>最后更新：<span class="font-medium text-gray-900" id="runtimeUpdatedAt">--</span></div>
+          </div>
+        </div>
       </div>
 
       <!-- API Keys Page -->
-      <div id="apikeysPage" class="p-8 hidden">
+      <div id="apikeysPage" class="p-4 md:p-8 hidden">
         <div class="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
-          <div class="flex justify-between items-center mb-6">
+          <div class="flex flex-wrap justify-between items-center gap-3 mb-6">
             <h2 class="text-xl font-semibold text-gray-900">API Keys 管理</h2>
-            <button onclick="showCreateApiKeyModal()" class="btn-primary px-4 py-2 bg-blue-500 text-white text-sm font-medium rounded-lg hover:bg-blue-600 transition">
-              <i class="fas fa-plus mr-2"></i>创建 API Key
-            </button>
+            <div class="flex flex-wrap items-center gap-2">
+              <input id="apiKeyKeywordFilter" type="text" placeholder="搜索名称或密钥" class="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              <select id="apiKeyStatusFilter" class="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="all">全部状态</option>
+                <option value="active">仅启用</option>
+                <option value="disabled">仅禁用</option>
+                <option value="risk">高风险</option>
+              </select>
+              <select id="apiKeySortFilter" class="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="traffic_desc">按 24h 请求</option>
+                <option value="risk_desc">按 风险等级</option>
+                <option value="success_asc">按 成功率升序</option>
+                <option value="remaining_asc">按 剩余额度升序</option>
+              </select>
+              <button onclick="applyApiKeyFilters()" class="px-3 py-2 bg-gray-100 text-gray-700 text-sm rounded-lg hover:bg-gray-200 transition">
+                <i class="fas fa-filter mr-1"></i>筛选
+              </button>
+              <button onclick="resetApiKeyFilters()" class="px-3 py-2 bg-gray-100 text-gray-700 text-sm rounded-lg hover:bg-gray-200 transition">
+                重置
+              </button>
+              <button id="batchEnableApiKeyBtn" onclick="batchToggleApiKeys(true)" class="hidden px-3 py-2 bg-emerald-100 text-emerald-700 text-sm rounded-lg hover:bg-emerald-200 transition">
+                批量启用
+              </button>
+              <button id="batchDisableApiKeyBtn" onclick="batchToggleApiKeys(false)" class="hidden px-3 py-2 bg-amber-100 text-amber-700 text-sm rounded-lg hover:bg-amber-200 transition">
+                批量禁用
+              </button>
+              <button id="batchDeleteApiKeyBtn" onclick="batchDeleteApiKeys()" class="hidden px-3 py-2 bg-red-100 text-red-700 text-sm rounded-lg hover:bg-red-200 transition">
+                批量删除
+              </button>
+              <button onclick="showCreateApiKeyModal()" class="btn-primary px-4 py-2 bg-blue-500 text-white text-sm font-medium rounded-lg hover:bg-blue-600 transition">
+                <i class="fas fa-plus mr-2"></i>创建 API Key
+              </button>
+            </div>
           </div>
           
           <div class="overflow-x-auto">
             <table class="w-full">
               <thead>
                 <tr class="border-b border-gray-200 bg-gray-50">
+                  <th class="text-left py-3 px-4 text-sm font-medium text-gray-600">
+                    <input type="checkbox" id="selectAllApiKeys" onchange="toggleSelectAllApiKeys()" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                  </th>
                   <th class="text-left py-3 px-4 text-sm font-medium text-gray-600">名称</th>
                   <th class="text-left py-3 px-4 text-sm font-medium text-gray-600">Key</th>
                   <th class="text-left py-3 px-4 text-sm font-medium text-gray-600">使用次数</th>
-                  <th class="text-left py-3 px-4 text-sm font-medium text-gray-600">最后使用</th>
+                  <th class="text-left py-3 px-4 text-sm font-medium text-gray-600">今日请求</th>
+                  <th class="text-left py-3 px-4 text-sm font-medium text-gray-600">24h 请求</th>
+                  <th class="text-left py-3 px-4 text-sm font-medium text-gray-600">24h 成功率</th>
+                  <th class="text-left py-3 px-4 text-sm font-medium text-gray-600">RPM 限流</th>
+                  <th class="text-left py-3 px-4 text-sm font-medium text-gray-600">每日配额</th>
+                  <th class="text-left py-3 px-4 text-sm font-medium text-gray-600">日剩余</th>
+                  <th class="text-left py-3 px-4 text-sm font-medium text-gray-600">最近状态</th>
+                  <th class="text-left py-3 px-4 text-sm font-medium text-gray-600">最后请求</th>
                   <th class="text-left py-3 px-4 text-sm font-medium text-gray-600">状态</th>
                   <th class="text-left py-3 px-4 text-sm font-medium text-gray-600">操作</th>
                 </tr>
               </thead>
               <tbody id="apiKeysTable">
                 <tr>
-                  <td colspan="6" class="text-center py-8 text-gray-500">
+                  <td colspan="14" class="text-center py-8 text-gray-500">
                     <i class="fas fa-spinner fa-spin mr-2"></i>加载中...
                   </td>
                 </tr>
@@ -229,26 +387,49 @@
       </div>
 
       <!-- Accounts Page (Tokens Only) -->
-      <div id="accountsPage" class="p-8 hidden">
+      <div id="accountsPage" class="p-4 md:p-8 hidden">
         <div class="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
-          <div class="flex justify-between items-center mb-6">
-            <div class="flex items-center space-x-4">
-              <h2 class="text-xl font-semibold text-gray-900">账号管理 (Tokens)</h2>
-              <div class="flex items-center space-x-2">
-                <span class="text-sm text-gray-600">账号总数: <span id="totalTokensCount" class="font-semibold text-gray-900">0</span></span>
-                <span class="text-gray-300">|</span>
-                <label class="text-sm text-gray-600">负载均衡:</label>
-                <select id="loadBalanceStrategy" onchange="changeLoadBalanceStrategy()" class="px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
-                  <option value="round-robin">轮询</option>
-                  <option value="random">随机</option>
-                  <option value="least-used">最少使用</option>
-                </select>
-              </div>
-              <button id="batchDeleteBtn" onclick="batchDeleteTokens()" class="hidden px-4 py-2 bg-red-100 text-red-700 text-sm font-medium rounded-lg hover:bg-red-200 transition">
-                <i class="fas fa-trash-alt mr-2"></i>删除选中 (<span id="selectedCount">0</span>)
-              </button>
+          <div class="flex flex-wrap justify-between items-center gap-3 mb-6">
+            <div class="flex flex-wrap items-center gap-2">
+              <h2 class="text-xl font-semibold text-gray-900 mr-2">账号管理 (Tokens)</h2>
+              <span class="text-sm text-gray-600">账号总数: <span id="totalTokensCount" class="font-semibold text-gray-900">0</span></span>
+              <span class="text-gray-300">|</span>
+              <label class="text-sm text-gray-600">负载均衡:</label>
+              <select id="loadBalanceStrategy" onchange="changeLoadBalanceStrategy()" class="px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="round-robin">轮询</option>
+                <option value="random">随机</option>
+                <option value="least-used">最少使用</option>
+              </select>
+              <span id="envWriteNoticeAccounts" class="hidden text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+                当前环境已禁用在线写入 .env（可设置 ALLOW_ENV_FILE_UPDATES=true 后实时恢复）
+              </span>
             </div>
-            <div class="flex space-x-3">
+            <div class="flex flex-wrap items-center gap-2">
+              <input id="tokenKeywordFilter" type="text" placeholder="搜索名称/邮箱/账号ID" class="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              <select id="tokenStatusFilter" class="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="all">全部状态</option>
+                <option value="active">启用中</option>
+                <option value="cooling">冷却中</option>
+                <option value="healthy">巡检健康</option>
+                <option value="unhealthy">巡检异常</option>
+                <option value="auto-disabled">自动封停</option>
+                <option value="disabled">已禁用</option>
+              </select>
+              <button onclick="applyTokenFilters()" class="px-3 py-2 bg-gray-100 text-gray-700 text-sm rounded-lg hover:bg-gray-200 transition">
+                <i class="fas fa-filter mr-1"></i>筛选
+              </button>
+              <button onclick="resetTokenFilters()" class="px-3 py-2 bg-gray-100 text-gray-700 text-sm rounded-lg hover:bg-gray-200 transition">
+                重置
+              </button>
+              <button id="batchEnableTokenBtn" onclick="batchToggleTokens(true)" class="hidden px-3 py-2 bg-emerald-100 text-emerald-700 text-sm rounded-lg hover:bg-emerald-200 transition">
+                批量启用
+              </button>
+              <button id="batchDisableTokenBtn" onclick="batchToggleTokens(false)" class="hidden px-3 py-2 bg-amber-100 text-amber-700 text-sm rounded-lg hover:bg-amber-200 transition">
+                批量禁用
+              </button>
+              <button id="batchDeleteBtn" onclick="batchDeleteTokens()" class="hidden px-3 py-2 bg-red-100 text-red-700 text-sm rounded-lg hover:bg-red-200 transition">
+                <i class="fas fa-trash-alt mr-1"></i>删除选中 (<span id="selectedCount">0</span>)
+              </button>
               <button onclick="refreshAllQuotas()" class="px-4 py-2 bg-green-100 text-green-700 text-sm font-medium rounded-lg hover:bg-green-200 transition">
                 <i class="fas fa-sync-alt mr-2"></i>刷新全部额度
               </button>
@@ -273,6 +454,13 @@
                   <th class="text-left py-3 px-4 text-sm font-medium text-gray-600">总请求</th>
                   <th class="text-left py-3 px-4 text-sm font-medium text-gray-600">成功</th>
                   <th class="text-left py-3 px-4 text-sm font-medium text-gray-600">失败</th>
+                  <th class="text-left py-3 px-4 text-sm font-medium text-gray-600">成功率</th>
+                  <th class="text-left py-3 px-4 text-sm font-medium text-gray-600">连续失败</th>
+                  <th class="text-left py-3 px-4 text-sm font-medium text-gray-600">冷却至</th>
+                  <th class="text-left py-3 px-4 text-sm font-medium text-gray-600">健康状态</th>
+                  <th class="text-left py-3 px-4 text-sm font-medium text-gray-600">下次巡检</th>
+                  <th class="text-left py-3 px-4 text-sm font-medium text-gray-600">最近错误</th>
+                  <th class="text-left py-3 px-4 text-sm font-medium text-gray-600">最后使用</th>
                   <th class="text-left py-3 px-4 text-sm font-medium text-gray-600">过期时间</th>
                   <th class="text-left py-3 px-4 text-sm font-medium text-gray-600">状态</th>
                   <th class="text-left py-3 px-4 text-sm font-medium text-gray-600">操作</th>
@@ -280,7 +468,7 @@
               </thead>
               <tbody id="tokensTable">
                 <tr>
-                  <td colspan="9" class="text-center py-8 text-gray-500">
+                  <td colspan="16" class="text-center py-8 text-gray-500">
                     <i class="fas fa-spinner fa-spin mr-2"></i>加载中...
                   </td>
                 </tr>
@@ -294,25 +482,25 @@
       </div>
 
       <!-- Analytics Page -->
-      <div id="analyticsPage" class="p-8 hidden">
+      <div id="analyticsPage" class="p-4 md:p-8 hidden">
         <!-- 时间范围选择 -->
         <div class="bg-white rounded-lg border border-gray-200 shadow-sm p-4 mb-6">
           <div class="flex items-center space-x-4">
             <label class="text-sm font-medium text-gray-700">时间范围：</label>
-            <button onclick="changeTimeRange('24h')" class="time-range-btn px-4 py-2 text-sm font-medium rounded-lg transition bg-blue-500 text-white">
+            <button data-range="24h" onclick="changeTimeRange('24h', event)" class="time-range-btn px-4 py-2 text-sm font-medium rounded-lg transition bg-blue-500 text-white">
               24小时
             </button>
-            <button onclick="changeTimeRange('7d')" class="time-range-btn px-4 py-2 text-sm font-medium rounded-lg transition text-gray-700 hover:bg-gray-100">
+            <button data-range="7d" onclick="changeTimeRange('7d', event)" class="time-range-btn px-4 py-2 text-sm font-medium rounded-lg transition text-gray-700 hover:bg-gray-100">
               7天
             </button>
-            <button onclick="changeTimeRange('30d')" class="time-range-btn px-4 py-2 text-sm font-medium rounded-lg transition text-gray-700 hover:bg-gray-100">
+            <button data-range="30d" onclick="changeTimeRange('30d', event)" class="time-range-btn px-4 py-2 text-sm font-medium rounded-lg transition text-gray-700 hover:bg-gray-100">
               30天
             </button>
           </div>
         </div>
 
         <!-- 统计卡片 -->
-        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        <div class="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-6 gap-4 mb-6">
           <div class="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
             <div class="flex items-center justify-between">
               <div>
@@ -360,10 +548,43 @@
               </div>
             </div>
           </div>
+          <div class="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
+            <div class="flex items-center justify-between">
+              <div>
+                <p class="text-sm text-gray-500">平均吞吐</p>
+                <p class="text-2xl font-bold text-indigo-600 mt-1" id="throughputPerHour">0/h</p>
+              </div>
+              <div class="w-12 h-12 bg-indigo-100 rounded-lg flex items-center justify-center">
+                <i class="fas fa-gauge-high text-indigo-600"></i>
+              </div>
+            </div>
+          </div>
+          <div class="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
+            <div class="flex items-center justify-between">
+              <div>
+                <p class="text-sm text-gray-500">错误率</p>
+                <p class="text-2xl font-bold text-rose-600 mt-1" id="errorRate">0%</p>
+              </div>
+              <div class="w-12 h-12 bg-rose-100 rounded-lg flex items-center justify-center">
+                <i class="fas fa-triangle-exclamation text-rose-600"></i>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+          <div class="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
+            <p class="text-sm text-gray-500">P50 响应时间</p>
+            <p class="text-xl font-bold text-gray-900 mt-1" id="latencyP50">0ms</p>
+          </div>
+          <div class="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
+            <p class="text-sm text-gray-500">P95 响应时间</p>
+            <p class="text-xl font-bold text-rose-700 mt-1" id="latencyP95">0ms</p>
+          </div>
         </div>
 
         <!-- 图表区域 -->
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
           <!-- 请求量趋势图 -->
           <div class="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
             <h3 class="text-lg font-semibold text-gray-900 mb-4">
@@ -383,6 +604,15 @@
               <canvas id="modelDistributionChart"></canvas>
             </div>
           </div>
+
+          <div class="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
+            <h3 class="text-lg font-semibold text-gray-900 mb-4">
+              <i class="fas fa-diagram-project text-indigo-600 mr-2"></i>接口分布
+            </h3>
+            <div style="height: 250px;">
+              <canvas id="endpointDistributionChart"></canvas>
+            </div>
+          </div>
         </div>
 
         <!-- 账号详细统计 -->
@@ -395,15 +625,22 @@
               <thead class="sticky top-0 bg-gray-50">
                 <tr class="border-b border-gray-200">
                   <th class="text-left py-3 px-4 text-sm font-medium text-gray-600">账号名称</th>
-                  <th class="text-left py-3 px-4 text-sm font-medium text-gray-600">请求次数</th>
-                  <th class="text-left py-3 px-4 text-sm font-medium text-gray-600">成功率</th>
+                  <th class="text-left py-3 px-4 text-sm font-medium text-gray-600">总请求</th>
+                  <th class="text-left py-3 px-4 text-sm font-medium text-gray-600">窗口请求</th>
+                  <th class="text-left py-3 px-4 text-sm font-medium text-gray-600">估算消耗</th>
+                  <th class="text-left py-3 px-4 text-sm font-medium text-gray-600">累计成功率</th>
+                  <th class="text-left py-3 px-4 text-sm font-medium text-gray-600">窗口成功率</th>
                   <th class="text-left py-3 px-4 text-sm font-medium text-gray-600">平均响应时间</th>
+                  <th class="text-left py-3 px-4 text-sm font-medium text-gray-600">连续失败</th>
+                  <th class="text-left py-3 px-4 text-sm font-medium text-gray-600">健康状态</th>
+                  <th class="text-left py-3 px-4 text-sm font-medium text-gray-600">下次巡检</th>
+                  <th class="text-left py-3 px-4 text-sm font-medium text-gray-600">最近巡检错误</th>
                   <th class="text-left py-3 px-4 text-sm font-medium text-gray-600">最后使用</th>
                 </tr>
               </thead>
               <tbody id="accountStatsTable">
                 <tr>
-                  <td colspan="5" class="text-center py-8 text-gray-500">
+                  <td colspan="12" class="text-center py-8 text-gray-500">
                     <i class="fas fa-spinner fa-spin mr-2"></i>加载中...
                   </td>
                 </tr>
@@ -414,23 +651,45 @@
 
         <!-- API 请求日志 -->
         <div class="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
-          <h3 class="text-lg font-semibold text-gray-900 mb-4">
-            <i class="fas fa-list text-gray-600 mr-2"></i>最近请求日志
-          </h3>
+          <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+            <h3 class="text-lg font-semibold text-gray-900">
+              <i class="fas fa-list text-gray-600 mr-2"></i>最近请求日志
+            </h3>
+            <div class="flex flex-wrap items-center gap-2">
+              <input id="logsKeywordFilter" type="text" placeholder="搜索模型/API Key/Token/错误信息" class="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              <select id="logsStatusFilter" class="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="all">全部状态</option>
+                <option value="success">仅成功</option>
+                <option value="error">仅失败</option>
+              </select>
+              <button onclick="applyLogFilters()" class="px-3 py-2 bg-gray-100 text-gray-700 text-sm rounded-lg hover:bg-gray-200 transition">
+                筛选
+              </button>
+              <button onclick="resetLogFilters()" class="px-3 py-2 bg-gray-100 text-gray-700 text-sm rounded-lg hover:bg-gray-200 transition">
+                重置
+              </button>
+              <button onclick="exportLogsCsv()" class="px-3 py-2 bg-blue-100 text-blue-700 text-sm rounded-lg hover:bg-blue-200 transition">
+                <i class="fas fa-file-export mr-1"></i>导出 CSV
+              </button>
+            </div>
+          </div>
           <div class="overflow-x-auto max-h-96 overflow-y-auto">
             <table class="w-full">
               <thead class="sticky top-0 bg-gray-50">
                 <tr class="border-b border-gray-200">
                   <th class="text-left py-3 px-4 text-sm font-medium text-gray-600">时间</th>
                   <th class="text-left py-3 px-4 text-sm font-medium text-gray-600">API Key</th>
+                  <th class="text-left py-3 px-4 text-sm font-medium text-gray-600">Token</th>
                   <th class="text-left py-3 px-4 text-sm font-medium text-gray-600">模型</th>
+                  <th class="text-left py-3 px-4 text-sm font-medium text-gray-600">接口</th>
                   <th class="text-left py-3 px-4 text-sm font-medium text-gray-600">状态</th>
                   <th class="text-left py-3 px-4 text-sm font-medium text-gray-600">响应时间</th>
+                  <th class="text-left py-3 px-4 text-sm font-medium text-gray-600">错误信息</th>
                 </tr>
               </thead>
               <tbody id="logsTable">
                 <tr>
-                  <td colspan="5" class="text-center py-8 text-gray-500">
+                  <td colspan="8" class="text-center py-8 text-gray-500">
                     <i class="fas fa-spinner fa-spin mr-2"></i>加载中...
                   </td>
                 </tr>
@@ -441,18 +700,96 @@
       </div>
 
       <!-- Settings Page -->
-      <div id="settingsPage" class="p-8 hidden">
-        <div class="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
-          <h2 class="text-xl font-semibold text-gray-900 mb-6">系统设置</h2>
-          <div class="space-y-6">
+      <div id="settingsPage" class="p-4 md:p-8 hidden">
+        <div class="space-y-6">
+          <div class="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
+            <h2 class="text-xl font-semibold text-gray-900 mb-6">账号与安全</h2>
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-2">修改密码</label>
               <button onclick="showChangePasswordModal()" class="btn-primary px-4 py-2 bg-blue-500 text-white text-sm font-medium rounded-lg hover:bg-blue-600 transition">
                 <i class="fas fa-lock mr-2"></i>修改密码
               </button>
             </div>
-            <div class="pt-6 border-t border-gray-200">
-              <p class="text-sm text-gray-600">更多设置功能开发中...</p>
+          </div>
+
+          <div class="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
+            <h2 class="text-xl font-semibold text-gray-900 mb-4">运行参数</h2>
+            <p class="text-sm text-gray-500 mb-6">用于控制默认限流、并发保护和 Token 熔断策略。</p>
+            <p id="envWriteNoticeSettings" class="hidden text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-4">
+              当前环境已禁用在线写入 .env，运行参数保存按钮不可用。可设置 <code>ALLOW_ENV_FILE_UPDATES=true</code> 后实时生效（无需重启）。
+            </p>
+            <form id="runtimeSettingsForm" onsubmit="saveRuntimeSettings(event)" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">默认 API Key RPM</label>
+                <input id="settingApiKeyDefaultRpmLimit" type="number" min="0" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">全局最大并发</label>
+                <input id="settingMaxConcurrentProxyRequests" type="number" min="1" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">熔断触发阈值（固定 1 次失败）</label>
+                <input id="settingTokenCircuitBreakerThreshold" type="number" min="1" readonly class="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-100 text-gray-600 focus:outline-none" />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">熔断冷却时长（分钟）</label>
+                <input id="settingTokenCooldownMinutes" type="number" min="1" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div class="md:col-span-2 p-4 rounded-lg border border-gray-200 bg-gray-50">
+                <label class="inline-flex items-center space-x-2 text-sm font-medium text-gray-700">
+                  <input id="settingTokenHealthCheckEnabled" type="checkbox" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                  <span>启用 Token 自动健康巡检（全部账号）</span>
+                </label>
+                <p class="text-xs text-gray-500 mt-2">巡检失败将自动封停，按失败次数递增加时，时间到后自动复测。</p>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">健康巡检间隔（秒）</label>
+                <input id="settingTokenHealthCheckIntervalSeconds" type="number" min="30" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">健康巡检超时（毫秒）</label>
+                <input id="settingTokenHealthCheckTimeoutMs" type="number" min="1000" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">巡检最大封停时长（分钟）</label>
+                <input id="settingTokenHealthCheckMaxCooldownMinutes" type="number" min="10" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div class="md:col-span-2 pt-2">
+                <button type="submit" class="btn-primary px-4 py-2 bg-blue-500 text-white text-sm font-medium rounded-lg hover:bg-blue-600 transition">
+                  <i class="fas fa-save mr-2"></i>保存运行参数
+                </button>
+              </div>
+            </form>
+          </div>
+
+          <div class="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
+            <h2 class="text-xl font-semibold text-gray-900 mb-4">实时健康快照</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-gray-700">
+              <div class="p-4 rounded-lg bg-gray-50 border border-gray-200">
+                <p class="text-xs text-gray-500 mb-1">服务状态</p>
+                <p class="font-semibold text-gray-900" id="settingsRuntimeStatus">--</p>
+              </div>
+              <div class="p-4 rounded-lg bg-gray-50 border border-gray-200">
+                <p class="text-xs text-gray-500 mb-1">Token（活跃/冷却/总数）</p>
+                <p class="font-semibold text-gray-900" id="settingsRuntimeTokens">--</p>
+              </div>
+              <div class="p-4 rounded-lg bg-gray-50 border border-gray-200">
+                <p class="text-xs text-gray-500 mb-1">并发（当前/上限）</p>
+                <p class="font-semibold text-gray-900" id="settingsRuntimeProxy">--</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
+            <h2 class="text-xl font-semibold text-gray-900 mb-4">数据维护</h2>
+            <p class="text-sm text-gray-500 mb-4">定期清理历史日志可以减少数据库体积并提升查询性能。</p>
+            <div class="flex flex-wrap items-center gap-3">
+              <label class="text-sm text-gray-700">清理早于</label>
+              <input id="cleanupLogsDays" type="number" min="1" value="30" class="w-24 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              <label class="text-sm text-gray-700">天的日志</label>
+              <button onclick="cleanupOldLogs()" class="px-4 py-2 bg-red-100 text-red-700 text-sm font-medium rounded-lg hover:bg-red-200 transition">
+                <i class="fas fa-broom mr-1"></i>执行清理
+              </button>
             </div>
           </div>
         </div>
@@ -469,9 +806,20 @@
           <label class="block text-sm font-medium text-gray-700 mb-2">名称（可选）</label>
           <input type="text" id="apiKeyName" placeholder="例如：生产环境" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition" />
         </div>
+
+        <div class="grid grid-cols-2 gap-3 mb-6">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">RPM 限流</label>
+            <input type="number" id="apiKeyRpmLimit" min="0" value="60" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">每日配额</label>
+            <input type="number" id="apiKeyDailyLimit" min="0" value="0" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition" />
+          </div>
+        </div>
         
         <div class="flex space-x-3">
-          <button type="button" onclick="document.getElementById('createApiKeyModal').classList.add('hidden')" class="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition">
+          <button type="button" onclick="closeCreateApiKeyModal()" class="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition">
             取消
           </button>
           <button type="submit" class="btn-primary flex-1 px-4 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition">
@@ -502,7 +850,7 @@
         </div>
         
         <div class="flex space-x-3">
-          <button type="button" onclick="document.getElementById('createTokenModal').classList.add('hidden')" class="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition">
+          <button type="button" onclick="closeCreateTokenModal()" class="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition">
             取消
           </button>
           <button type="submit" class="btn-primary flex-1 px-4 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition">
@@ -603,6 +951,8 @@
       </form>
     </div>
   </div>
+
+  <div id="toastContainer" class="fixed top-4 right-4 z-[60] space-y-2"></div>
 
   <script src="/admin/js/admin.js"></script>
 </body>

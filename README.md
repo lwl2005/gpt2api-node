@@ -47,9 +47,18 @@
 - ✅ API Key 管理和认证
 - ✅ 请求统计和数据分析
 - ✅ 支持流式和非流式响应
-- ✅ OpenAI API 兼容接口
+- ✅ OpenAI Chat Completions + Completions(legacy) + Responses 三接口兼容
+- ✅ API Key 级别用量统计接口（`/v1/usage`）
+- ✅ API Key 限流与每日配额（`rpm_limit` / `daily_limit`）
+- ✅ Token 自动熔断与冷却恢复（失败一次即冷却，冷却时长按连续失败次数叠加）
+- ✅ 全局并发保护（防止服务雪崩）
 - ✅ 批量删除账号功能
 - ✅ 实时活动记录
+- ✅ 管理后台可视化运行状态面板（并发/熔断/健康）
+- ✅ 管理后台支持在线调整运行参数（默认可在线写入并实时生效）
+- ✅ API Key / Token 高级筛选与批量操作
+- ✅ 请求日志条件筛选与 CSV 导出
+- ✅ 后台一键清理历史日志（按天数）
 
 ## 快速开始
 
@@ -86,9 +95,10 @@ npm install
 npm run init-db
 ```
 
-默认管理员账户：
-- 用户名：`admin`
-- 密码：`admin123`
+初始化说明：
+- 用户名默认使用 `ADMIN_USERNAME`（未设置时为 `admin`）
+- 密码必须通过 `ADMIN_PASSWORD` 配置（生产环境强制）
+- 开发环境若未配置 `ADMIN_PASSWORD`，会自动生成一次性初始密码并打印到控制台
 
 #### 3. 启动服务
 
@@ -106,7 +116,7 @@ npm run dev
 
 打开浏览器访问：`http://localhost:3000/admin`
 
-使用默认账户登录后，请立即修改密码。
+使用初始管理员账户登录后，请立即修改密码。
 
 ## 管理后台功能
 
@@ -121,24 +131,40 @@ npm run dev
 - 创建和管理 API Keys
 - 查看使用统计
 - 启用/禁用 API Key
+- 配置每分钟限流（`rpm_limit`）
+- 配置每日配额（`daily_limit`）
+- 支持在列表中在线编辑并保存限流参数
+- 支持关键字/状态筛选
+- 支持批量启用、批量禁用、批量删除
 
 ### 账号管理
 - 批量导入 Token（支持 JSON 文件）
 - 手动添加账号
 - 批量删除账号
+- 批量启用/禁用账号
 - 查看账号额度和使用情况
 - 刷新账号额度
 - 负载均衡策略配置
+- 查看熔断状态（连续失败次数、冷却截止时间）
+- 支持按关键字和状态（启用/冷却/禁用）筛选
 
 ### 数据分析
 - 请求量趋势图表
 - 模型使用分布
 - 账号详细统计
 - API 请求日志
+- 日志关键字/状态筛选
+- 日志 CSV 导出
 
 ### 系统设置
 - 修改管理员密码
 - 负载均衡策略设置
+- 在线调整运行参数：
+  - `API_KEY_DEFAULT_RPM_LIMIT`
+  - `MAX_CONCURRENT_PROXY_REQUESTS`
+  - `TOKEN_CIRCUIT_BREAKER_THRESHOLD`（固定为 `1`，失败一次立即进入冷却）
+  - `TOKEN_COOLDOWN_MINUTES`
+- 数据维护：按天数清理历史日志
 
 ## 负载均衡策略
 
@@ -192,6 +218,64 @@ curl http://localhost:3000/v1/chat/completions \
   }'
 ```
 
+### 文本补全接口（legacy）
+
+**端点**: `POST /v1/completions`
+
+兼容 OpenAI 旧版 Completions 请求格式（`prompt`）。
+
+```bash
+curl http://localhost:3000/v1/completions \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-5.3-codex",
+    "prompt": "写一个 hello world 函数",
+    "stream": false
+  }'
+```
+
+### 引擎补全别名（legacy）
+
+**端点**: `POST /v1/engines/:model/completions`
+
+OpenAI 旧版 Engines 风格别名，效果等同于 `/v1/completions`。
+
+```bash
+curl http://localhost:3000/v1/engines/gpt-5.3-codex/completions \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "prompt": "写一个 hello world 函数",
+    "stream": false
+  }'
+```
+
+兼容边界说明（Completions）：
+- 当前仅支持 `n=1`
+- 暂不支持 `suffix`
+- 暂不支持 `best_of>1`
+- `stream=true` 时暂不支持 `echo=true`
+
+未实现的 OpenAI 接口族（如 `embeddings` / `images` / `audio` / `assistants` 等）会返回 `501 endpoint_not_implemented`。
+
+### Responses 接口
+
+**端点**: `POST /v1/responses`
+
+支持标准 `input` 字段，也兼容 `messages` 透传。
+
+```bash
+curl http://localhost:3000/v1/responses \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-5.3-codex",
+    "input": "用一句话介绍这个项目",
+    "stream": false
+  }'
+```
+
 ### 模型列表
 
 **端点**: `GET /v1/models`
@@ -200,12 +284,95 @@ curl http://localhost:3000/v1/chat/completions \
 curl http://localhost:3000/v1/models
 ```
 
+### 单模型查询
+
+**端点**: `GET /v1/models/:modelId`
+
+```bash
+curl http://localhost:3000/v1/models/gpt-5.3-codex
+```
+
+### API Key 元信息
+
+**端点**: `GET /v1/keys/me`
+
+```bash
+curl http://localhost:3000/v1/keys/me \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+返回中包含：
+- `rpm_limit`：每分钟限流上限（0 表示不限流）
+- `daily_limit`：每日请求上限（0 表示不限额）
+
+### API Key 用量统计
+
+**端点**: `GET /v1/usage`
+
+支持查询参数：
+- `days`（1-30，默认 7）
+- `model_limit`（1-50，默认 10）
+
+```bash
+curl "http://localhost:3000/v1/usage?days=7&model_limit=10" \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+当代理接口（`/v1/chat/completions`、`/v1/completions`、`/v1/engines/:model/completions`、`/v1/responses`）触发限流或配额时，将返回 `429`，并附带：
+- `x-ratelimit-limit-minute` / `x-ratelimit-remaining-minute`
+- `x-ratelimit-limit-day` / `x-ratelimit-remaining-day`
+- `retry-after`
+
+### 接口索引
+
+**端点**: `GET /v1/endpoints`
+
+```bash
+curl http://localhost:3000/v1/endpoints
+```
+
 ### 健康检查
 
 **端点**: `GET /health`
 
 ```bash
 curl http://localhost:3000/health
+```
+
+也支持 OpenAI 风格前缀：`GET /v1/health`
+
+### 管理运行参数（管理员登录后）
+
+**端点**:
+- `GET /admin/settings/runtime`
+- `POST /admin/settings/runtime`
+
+说明：默认支持在线写入 `.env`，保存后会实时热更新到运行时（无需重启）。如需禁用，可设置 `ALLOW_ENV_FILE_UPDATES=false`。
+
+`POST` 请求体示例：
+
+```json
+{
+  "apiKeyDefaultRpmLimit": 60,
+  "maxConcurrentProxyRequests": 100,
+  "tokenCircuitBreakerThreshold": 3,
+  "tokenCooldownMinutes": 10
+}
+```
+
+### 管理日志（管理员登录后）
+
+**端点**:
+- `GET /admin/stats/logs?limit=200&status=all|success|error&keyword=...`
+- `GET /admin/stats/logs/export?limit=5000&status=all|success|error&keyword=...`
+- `POST /admin/stats/logs/cleanup`
+
+`POST /admin/stats/logs/cleanup` 请求体示例：
+
+```json
+{
+  "days": 30
+}
 ```
 
 ## 支持的模型
@@ -326,9 +493,20 @@ console.log(response.choices[0].message.content);
 
 ```env
 PORT=3000
-SESSION_SECRET=your-secret-key-change-in-production
+SESSION_SECRET=replace-with-strong-random-secret-min-32chars
+JWT_SECRET=replace-with-strong-random-secret-min-32chars
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=replace-with-strong-admin-password
 LOAD_BALANCE_STRATEGY=round-robin
 MODELS_FILE=./models.json
+DEFAULT_CODEX_MODEL=gpt-5-codex
+API_KEY_DEFAULT_RPM_LIMIT=60
+MAX_CONCURRENT_PROXY_REQUESTS=100
+TOKEN_CIRCUIT_BREAKER_THRESHOLD=1
+TOKEN_COOLDOWN_MINUTES=10
+ALLOW_ENV_FILE_UPDATES=true
+ENV_HOT_RELOAD=true
+EXPOSE_DETAILED_ERRORS=false
 ```
 
 ## 项目结构
@@ -369,9 +547,11 @@ gpt2api-node/
 ## 注意事项
 
 1. **安全性**: 
+   - 生产环境必须配置高强度 `SESSION_SECRET`、`JWT_SECRET` 和 `ADMIN_PASSWORD`
    - 首次登录后请立即修改管理员密码
    - 妥善保管 API Keys
    - 生产环境请使用 HTTPS
+   - 默认允许管理后台在线写入 `.env` 并热更新；如需锁定配置，可设置 `ALLOW_ENV_FILE_UPDATES=false`
 
 2. **网络要求**: 需要能够访问 `chatgpt.com` 和 `auth.openai.com`
 
@@ -398,6 +578,17 @@ gpt2api-node/
 1. 检查 API Key 是否正确
 2. 确保有可用的 Token 账号
 3. 查看管理后台的请求日志
+
+### 报错：selected model may not exist or you may not have access
+
+常见原因：
+1. 请求中的模型名被终端颜色码污染（例如 `gpt-5.3-codex[1m`）
+2. 当前账号对该模型没有访问权限
+
+处理建议：
+1. 先调用 `GET /v1/models` 确认可用模型
+2. 改用 `gpt-5-codex` 或你账号有权限的模型
+3. 通过环境变量 `DEFAULT_CODEX_MODEL` 设置默认模型
 
 ## 许可证
 

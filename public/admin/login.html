@@ -53,6 +53,7 @@
             <input 
               type="text" 
               id="username"
+              autocomplete="username"
               class="input-focus block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:outline-none transition"
               placeholder="请输入用户名"
               required
@@ -72,11 +73,28 @@
             <input 
               type="password" 
               id="password"
-              class="input-focus block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:outline-none transition"
+              autocomplete="current-password"
+              class="input-focus block w-full pl-10 pr-10 py-3 border border-gray-300 rounded-lg focus:outline-none transition"
               placeholder="请输入密码"
               required
             />
+            <button
+              type="button"
+              id="togglePasswordBtn"
+              class="absolute inset-y-0 right-0 pr-3 text-gray-400 hover:text-gray-600 transition"
+              title="显示或隐藏密码"
+            >
+              <i class="fas fa-eye"></i>
+            </button>
           </div>
+        </div>
+
+        <div class="mb-6 flex items-center justify-between">
+          <label class="inline-flex items-center text-sm text-gray-600">
+            <input id="rememberUsername" type="checkbox" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 mr-2" />
+            记住用户名
+          </label>
+          <span class="text-xs text-gray-400">仅保存在当前浏览器</span>
         </div>
 
         <!-- Error Message -->
@@ -102,54 +120,124 @@
       <div class="mt-6 pt-6 border-t border-gray-200">
         <div class="text-center text-sm text-gray-500">
           <i class="fas fa-info-circle mr-1"></i>
-          默认账户: <span class="font-medium text-gray-700">admin / admin123</span>
+          首次初始化后，请使用你自定义的管理员账号登录
         </div>
         <div class="text-center text-xs text-gray-400 mt-2">
-          首次登录后请立即修改密码
+          建议定期修改密码并开启 HTTPS
         </div>
       </div>
     </div>
   </div>
 
   <script>
+    const USERNAME_STORAGE_KEY = 'gpt2api_admin_last_username';
+
+    function showLoginError(message) {
+      const errorDiv = document.getElementById('errorMessage');
+      const errorText = document.getElementById('errorText');
+      errorText.textContent = message || '登录失败';
+      errorDiv.classList.remove('hidden');
+    }
+
+    function setLoginLoading(loading) {
+      const loginBtn = document.getElementById('loginBtn');
+      loginBtn.disabled = loading;
+      loginBtn.innerHTML = loading
+        ? '<i class="fas fa-spinner fa-spin mr-2"></i> 登录中...'
+        : '<i class="fas fa-sign-in-alt mr-2"></i> 登录';
+    }
+
+    function bindPasswordToggle() {
+      const passwordInput = document.getElementById('password');
+      const toggleBtn = document.getElementById('togglePasswordBtn');
+      if (!passwordInput || !toggleBtn) {
+        return;
+      }
+
+      toggleBtn.addEventListener('click', () => {
+        const isPassword = passwordInput.type === 'password';
+        passwordInput.type = isPassword ? 'text' : 'password';
+        toggleBtn.innerHTML = isPassword ? '<i class="fas fa-eye-slash"></i>' : '<i class="fas fa-eye"></i>';
+      });
+    }
+
+    function restoreRememberedUsername() {
+      const usernameInput = document.getElementById('username');
+      const rememberCheckbox = document.getElementById('rememberUsername');
+      const remembered = localStorage.getItem(USERNAME_STORAGE_KEY);
+      if (usernameInput && remembered) {
+        usernameInput.value = remembered;
+      }
+      if (rememberCheckbox) {
+        rememberCheckbox.checked = Boolean(remembered);
+      }
+    }
+
+    async function checkAlreadyLoggedIn() {
+      try {
+        const response = await fetch('/admin/auth/check', {
+          method: 'GET',
+          credentials: 'same-origin'
+        });
+        if (response.ok) {
+          window.location.href = '/admin/';
+        }
+      } catch {
+        // 忽略网络异常，继续停留登录页
+      }
+    }
+
     async function handleLogin(event) {
       event.preventDefault();
       
-      const username = document.getElementById('username').value;
+      const username = document.getElementById('username').value.trim();
       const password = document.getElementById('password').value;
+      const rememberUsername = document.getElementById('rememberUsername')?.checked === true;
       const errorDiv = document.getElementById('errorMessage');
-      const errorText = document.getElementById('errorText');
-      const loginBtn = document.getElementById('loginBtn');
       
       errorDiv.classList.add('hidden');
-      loginBtn.disabled = true;
-      loginBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> 登录中...';
+      setLoginLoading(true);
       
       try {
         const response = await fetch('/admin/auth/login', {
           method: 'POST',
+          credentials: 'same-origin',
           headers: {
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({ username, password })
         });
-        
-        const data = await response.json();
+
+        const raw = await response.text();
+        let data = null;
+        try {
+          data = raw ? JSON.parse(raw) : null;
+        } catch {
+          data = null;
+        }
         
         if (response.ok) {
+          if (rememberUsername) {
+            localStorage.setItem(USERNAME_STORAGE_KEY, username);
+          } else {
+            localStorage.removeItem(USERNAME_STORAGE_KEY);
+          }
           window.location.href = '/admin/';
         } else {
-          errorText.textContent = data.error || '登录失败';
-          errorDiv.classList.remove('hidden');
+          showLoginError(data?.error || data?.message || `登录失败（HTTP ${response.status}）`);
         }
       } catch (error) {
-        errorText.textContent = '网络错误: ' + error.message;
-        errorDiv.classList.remove('hidden');
+        showLoginError(`网络错误: ${error.message}`);
       } finally {
-        loginBtn.disabled = false;
-        loginBtn.innerHTML = '<i class="fas fa-sign-in-alt mr-2"></i> 登录';
+        setLoginLoading(false);
       }
     }
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      restoreRememberedUsername();
+      bindPasswordToggle();
+      await checkAlreadyLoggedIn();
+    });
   </script>
 </body>
 </html>

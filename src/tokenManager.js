@@ -40,6 +40,10 @@ class TokenManager {
   async saveToken(tokenData) {
     try {
       this.tokenData = tokenData;
+      // 内存模式（无文件路径）只更新进程内 token，不落盘
+      if (!this.tokenFilePath) {
+        return;
+      }
       await fs.writeFile(this.tokenFilePath, JSON.stringify(tokenData, null, 2), 'utf-8');
       console.log('✓ Token 已保存到文件');
     } catch (error) {
