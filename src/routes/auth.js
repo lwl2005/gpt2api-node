@@ -1,6 +1,7 @@
 import express from 'express';
 import { User } from '../models/index.js';
 import { authenticateAdmin } from '../middleware/auth.js';
+import { validateAdminPassword } from '../config/adminSecurityPolicy.js';
 
 const router = express.Router();
 
@@ -83,14 +84,15 @@ router.post('/change-password', authenticateAdmin, async (req, res) => {
       return res.status(400).json({ error: '旧密码和新密码不能为空' });
     }
 
-    if (newPassword.length < 6) {
-      return res.status(400).json({ error: '新密码长度至少为 6 位' });
-    }
-
     const user = User.findById(req.session.userId);
 
     if (!user) {
       return res.status(404).json({ error: '用户不存在' });
+    }
+
+    const passwordCheck = validateAdminPassword(newPassword, user.username || '');
+    if (!passwordCheck.valid) {
+      return res.status(400).json({ error: `新密码不符合要求：${passwordCheck.message}` });
     }
 
     const isValid = await User.verifyPassword(oldPassword, user.password);

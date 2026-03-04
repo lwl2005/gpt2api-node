@@ -19,6 +19,11 @@ const db = new Database(dbPath);
 
 // 启用外键约束
 db.pragma('foreign_keys = ON');
+// 优化 SQLite 在高并发读写下的稳定性与吞吐
+db.pragma('journal_mode = WAL');
+db.pragma('synchronous = NORMAL');
+db.pragma('busy_timeout = 5000');
+db.pragma('temp_store = MEMORY');
 
 // 初始化数据库表
 export function initDatabase() {

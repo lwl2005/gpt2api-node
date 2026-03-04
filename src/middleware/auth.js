@@ -10,7 +10,13 @@ const INSECURE_SECRET_VALUES = new Set([
 ]);
 const RATE_LIMIT_WINDOW_MS = 60 * 1000;
 const apiKeyRateBuckets = new Map();
+const apiKeyDailyUsageCache = new Map();
+const RATE_BUCKET_STALE_MS = 5 * 60 * 1000;
+const DAILY_USAGE_CACHE_STALE_MS = 2 * 24 * 60 * 60 * 1000;
+const CACHE_CLEANUP_INTERVAL_MS = 60 * 1000;
 let cachedJwtSecret = null;
+let lastRateBucketCleanupAt = 0;
+let lastDailyUsageCleanupAt = 0;
 
 function isProduction() {
   return process.env.NODE_ENV === 'production';
@@ -65,26 +71,114 @@ function getSecondsUntilUtcDayEnd() {
   return Math.max(1, Math.ceil((nextUtcMidnight - now.getTime()) / 1000));
 }
 
+function getUtcDateKey(timestampMs = Date.now()) {
+  const now = new Date(timestampMs);
+  const yyyy = now.getUTCFullYear();
+  const mm = String(now.getUTCMonth() + 1).padStart(2, '0');
+  const dd = String(now.getUTCDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function maybeCleanupRateBuckets(nowMs = Date.now()) {
+  if (nowMs - lastRateBucketCleanupAt < CACHE_CLEANUP_INTERVAL_MS) {
+    return;
+  }
+  lastRateBucketCleanupAt = nowMs;
+
+  for (const [apiKeyId, bucket] of apiKeyRateBuckets) {
+    if (!bucket || nowMs - (bucket.lastSeenAt || 0) > RATE_BUCKET_STALE_MS) {
+      apiKeyRateBuckets.delete(apiKeyId);
+    }
+  }
+}
+
+function maybeCleanupDailyUsageCache(nowMs = Date.now()) {
+  if (nowMs - lastDailyUsageCleanupAt < CACHE_CLEANUP_INTERVAL_MS) {
+    return;
+  }
+  lastDailyUsageCleanupAt = nowMs;
+
+  const currentDateKey = getUtcDateKey(nowMs);
+  for (const [apiKeyId, entry] of apiKeyDailyUsageCache) {
+    const staleByDate = entry?.dateKey && entry.dateKey !== currentDateKey;
+    const staleByTime = nowMs - (entry?.lastSeenAt || 0) > DAILY_USAGE_CACHE_STALE_MS;
+    if (staleByDate || staleByTime) {
+      apiKeyDailyUsageCache.delete(apiKeyId);
+    }
+  }
+}
+
 function checkRateLimitByMinute(apiKeyId, rpmLimit) {
   if (rpmLimit <= 0) {
     return { allowed: true, remaining: Infinity, retryAfter: 0 };
   }
 
   const now = Date.now();
-  const windowStart = now - RATE_LIMIT_WINDOW_MS;
-  const existing = apiKeyRateBuckets.get(apiKeyId) || [];
-  const active = existing.filter((timestamp) => timestamp > windowStart);
+  maybeCleanupRateBuckets(now);
 
-  if (active.length >= rpmLimit) {
-    const earliest = active[0] || now;
-    const retryAfter = Math.max(1, Math.ceil((RATE_LIMIT_WINDOW_MS - (now - earliest)) / 1000));
-    apiKeyRateBuckets.set(apiKeyId, active);
+  const currentWindowStart = Math.floor(now / RATE_LIMIT_WINDOW_MS) * RATE_LIMIT_WINDOW_MS;
+  let bucket = apiKeyRateBuckets.get(apiKeyId);
+  if (!bucket || bucket.windowStart !== currentWindowStart) {
+    bucket = {
+      windowStart: currentWindowStart,
+      count: 0,
+      lastSeenAt: now
+    };
+  }
+
+  if (bucket.count >= rpmLimit) {
+    const retryAfter = Math.max(
+      1,
+      Math.ceil(((bucket.windowStart + RATE_LIMIT_WINDOW_MS) - now) / 1000)
+    );
+    bucket.lastSeenAt = now;
+    apiKeyRateBuckets.set(apiKeyId, bucket);
     return { allowed: false, remaining: 0, retryAfter };
   }
 
-  active.push(now);
-  apiKeyRateBuckets.set(apiKeyId, active);
-  return { allowed: true, remaining: Math.max(0, rpmLimit - active.length), retryAfter: 0 };
+  bucket.count += 1;
+  bucket.lastSeenAt = now;
+  apiKeyRateBuckets.set(apiKeyId, bucket);
+  return { allowed: true, remaining: Math.max(0, rpmLimit - bucket.count), retryAfter: 0 };
+}
+
+function getDailyUsageBucket(apiKeyId) {
+  const now = Date.now();
+  const currentDateKey = getUtcDateKey(now);
+  maybeCleanupDailyUsageCache(now);
+
+  const cached = apiKeyDailyUsageCache.get(apiKeyId);
+  if (cached && cached.dateKey === currentDateKey) {
+    cached.lastSeenAt = now;
+    return cached;
+  }
+
+  const todayCount = ApiLog.getTodayCountByApiKey(apiKeyId);
+  const entry = {
+    dateKey: currentDateKey,
+    count: todayCount,
+    lastSeenAt: now
+  };
+  apiKeyDailyUsageCache.set(apiKeyId, entry);
+  return entry;
+}
+
+function increaseDailyUsage(apiKeyId) {
+  const now = Date.now();
+  const currentDateKey = getUtcDateKey(now);
+  const existing = apiKeyDailyUsageCache.get(apiKeyId);
+
+  if (existing && existing.dateKey === currentDateKey) {
+    existing.count += 1;
+    existing.lastSeenAt = now;
+    return;
+  }
+
+  apiKeyDailyUsageCache.set(apiKeyId, {
+    dateKey: currentDateKey,
+    count: ApiLog.getTodayCountByApiKey(apiKeyId) + 1,
+    lastSeenAt: now
+  });
 }
 
 // 统一解析 Bearer Token，兼容大小写和多余空格
@@ -144,7 +238,9 @@ export function authenticateAdmin(req, res, next) {
 
 // API Key 认证中间件（用于代理接口）
 export function authenticateApiKey(req, res, next) {
-  const apiKey = req.headers['x-api-key'] || parseBearerToken(req.headers.authorization);
+  const xApiKeyHeader = req.headers['x-api-key'];
+  const apiKey = (Array.isArray(xApiKeyHeader) ? xApiKeyHeader[0] : xApiKeyHeader)
+    || parseBearerToken(req.headers.authorization);
 
   if (!apiKey) {
     return res.status(401).json(buildOpenAIError('API key required', 'invalid_request_error', {
@@ -191,7 +287,8 @@ export function enforceApiKeyPolicy(req, res, next) {
   // 每日配额（daily_limit=0 表示不限制）
   const dailyLimit = normalizeNonNegativeInt(keyData.daily_limit, 0);
   if (dailyLimit > 0) {
-    const todayCount = ApiLog.getTodayCountByApiKey(keyData.id);
+    const dailyUsage = getDailyUsageBucket(keyData.id);
+    const todayCount = dailyUsage.count;
     const remaining = Math.max(0, dailyLimit - todayCount);
     res.setHeader('x-ratelimit-limit-day', String(dailyLimit));
     res.setHeader('x-ratelimit-remaining-day', String(remaining));
@@ -208,6 +305,9 @@ export function enforceApiKeyPolicy(req, res, next) {
 
   // 更新使用统计
   ApiKey.updateUsage(keyData.id);
+  if (dailyLimit > 0) {
+    increaseDailyUsage(keyData.id);
+  }
   next();
 }
 

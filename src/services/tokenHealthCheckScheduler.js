@@ -71,6 +71,7 @@ function getHealthCheckConfig() {
   const baseCooldownMinutes = parsePositiveInt(process.env.TOKEN_COOLDOWN_MINUTES, 10, 1, 1440);
   const maxCooldownMinutes = parsePositiveInt(process.env.TOKEN_HEALTHCHECK_MAX_COOLDOWN_MINUTES, 720, 10, 1440);
   const batchSize = parsePositiveInt(process.env.TOKEN_HEALTHCHECK_BATCH_SIZE, 1000, 1, 5000);
+  const concurrency = parsePositiveInt(process.env.TOKEN_HEALTHCHECK_CONCURRENCY, 3, 1, 20);
   const model = String(process.env.TOKEN_HEALTHCHECK_MODEL || process.env.DEFAULT_CODEX_MODEL || 'gpt-5-codex').trim() || 'gpt-5-codex';
 
   return {
@@ -80,6 +81,7 @@ function getHealthCheckConfig() {
     baseCooldownMinutes,
     maxCooldownMinutes,
     batchSize,
+    concurrency,
     model
   };
 }
@@ -198,14 +200,27 @@ export class TokenHealthCheckScheduler {
     try {
       // 只巡检“已到时间”的账号，避免无意义探测
       const tokens = Token.getDueHealthCheckCandidates(config.batchSize);
+      const chunkSize = Math.max(1, config.concurrency || 1);
 
-      for (const token of tokens) {
-        checked += 1;
-        const success = await this.checkSingleToken(token, config);
-        if (success) {
-          successCount += 1;
-        } else {
-          failedCount += 1;
+      for (let i = 0; i < tokens.length; i += chunkSize) {
+        const chunk = tokens.slice(i, i + chunkSize);
+        checked += chunk.length;
+
+        const results = await Promise.allSettled(
+          chunk.map((token) => this.checkSingleToken(token, config))
+        );
+
+        for (const result of results) {
+          if (result.status === 'fulfilled') {
+            if (result.value) {
+              successCount += 1;
+            } else {
+              failedCount += 1;
+            }
+          } else {
+            failedCount += 1;
+            console.error('Token 健康巡检子任务异常:', result.reason);
+          }
         }
       }
 

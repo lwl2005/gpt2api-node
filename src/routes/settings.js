@@ -138,6 +138,7 @@ router.get('/runtime', async (req, res) => {
       tokenHealthCheckEnabled: parseBoolean(process.env.TOKEN_HEALTHCHECK_ENABLED, true),
       tokenHealthCheckIntervalSeconds: parsePositiveInt(process.env.TOKEN_HEALTHCHECK_INTERVAL_SECONDS, 120, 30, 86400),
       tokenHealthCheckTimeoutMs: parsePositiveInt(process.env.TOKEN_HEALTHCHECK_TIMEOUT_MS, 15000, 1000, 120000),
+      tokenHealthCheckConcurrency: parsePositiveInt(process.env.TOKEN_HEALTHCHECK_CONCURRENCY, 3, 1, 20),
       tokenHealthCheckMaxCooldownMinutes: parsePositiveInt(process.env.TOKEN_HEALTHCHECK_MAX_COOLDOWN_MINUTES, 720, 10, 1440),
       envFileWritable: canWriteEnvFile(),
       envHotReloadEnabled: envState.hotReloadEnabled,
@@ -163,6 +164,12 @@ router.post('/runtime', async (req, res) => {
     const tokenHealthCheckEnabled = parseBoolean(req.body.tokenHealthCheckEnabled, true);
     const tokenHealthCheckIntervalSeconds = parsePositiveInt(req.body.tokenHealthCheckIntervalSeconds, NaN, 30, 86400);
     const tokenHealthCheckTimeoutMs = parsePositiveInt(req.body.tokenHealthCheckTimeoutMs, NaN, 1000, 120000);
+    const tokenHealthCheckConcurrency = parsePositiveInt(
+      req.body.tokenHealthCheckConcurrency,
+      parsePositiveInt(process.env.TOKEN_HEALTHCHECK_CONCURRENCY, 3, 1, 20),
+      1,
+      20
+    );
     const tokenHealthCheckMaxCooldownMinutes = parsePositiveInt(req.body.tokenHealthCheckMaxCooldownMinutes, NaN, 10, 1440);
 
     if (!Number.isFinite(apiKeyDefaultRpmLimit) ||
@@ -171,6 +178,7 @@ router.post('/runtime', async (req, res) => {
         !Number.isFinite(tokenCooldownMinutes) ||
         !Number.isFinite(tokenHealthCheckIntervalSeconds) ||
         !Number.isFinite(tokenHealthCheckTimeoutMs) ||
+        !Number.isFinite(tokenHealthCheckConcurrency) ||
         !Number.isFinite(tokenHealthCheckMaxCooldownMinutes)) {
       return res.status(400).json({ error: '运行参数格式错误，请检查输入范围' });
     }
@@ -183,6 +191,7 @@ router.post('/runtime', async (req, res) => {
       TOKEN_HEALTHCHECK_ENABLED: tokenHealthCheckEnabled ? 'true' : 'false',
       TOKEN_HEALTHCHECK_INTERVAL_SECONDS: tokenHealthCheckIntervalSeconds,
       TOKEN_HEALTHCHECK_TIMEOUT_MS: tokenHealthCheckTimeoutMs,
+      TOKEN_HEALTHCHECK_CONCURRENCY: tokenHealthCheckConcurrency,
       TOKEN_HEALTHCHECK_MAX_COOLDOWN_MINUTES: tokenHealthCheckMaxCooldownMinutes
     });
     await reloadRuntimeEnvFromDisk('settings:runtime');
@@ -198,6 +207,7 @@ router.post('/runtime', async (req, res) => {
         tokenHealthCheckEnabled,
         tokenHealthCheckIntervalSeconds,
         tokenHealthCheckTimeoutMs,
+        tokenHealthCheckConcurrency,
         tokenHealthCheckMaxCooldownMinutes
       }
     });

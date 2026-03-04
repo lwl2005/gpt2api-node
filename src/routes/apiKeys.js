@@ -182,7 +182,16 @@ router.put('/:id', (req, res) => {
 // 删除 API Key
 router.delete('/:id', (req, res) => {
   try {
-    const { id } = req.params;
+    const id = parsePositiveInt(req.params.id, NaN, 1);
+    if (!Number.isFinite(id)) {
+      return res.status(400).json({ error: '无效的 API Key ID' });
+    }
+
+    const key = ApiKey.findById(id);
+    if (!key) {
+      return res.status(404).json({ error: 'API Key 不存在' });
+    }
+
     ApiKey.delete(id);
     res.json({ success: true });
   } catch (error) {

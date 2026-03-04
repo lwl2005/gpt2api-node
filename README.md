@@ -96,9 +96,10 @@ npm run init-db
 ```
 
 初始化说明：
-- 用户名默认使用 `ADMIN_USERNAME`（未设置时为 `admin`）
-- 密码必须通过 `ADMIN_PASSWORD` 配置（生产环境强制）
-- 开发环境若未配置 `ADMIN_PASSWORD`，会自动生成一次性初始密码并打印到控制台
+- 用户名来自 `ADMIN_USERNAME`（未配置时固定为 `admin`）
+- 密码来自 `ADMIN_PASSWORD`（未配置时固定为 `Gpt2api@2026`）
+- 自定义密码时策略为：至少 12 位，且必须包含大小写字母、数字和特殊字符
+- 建议首次登录后立即修改默认账号密码
 
 #### 3. 启动服务
 
@@ -164,7 +165,10 @@ npm run dev
   - `MAX_CONCURRENT_PROXY_REQUESTS`
   - `TOKEN_CIRCUIT_BREAKER_THRESHOLD`（固定为 `1`，失败一次立即进入冷却）
   - `TOKEN_COOLDOWN_MINUTES`
-- 数据维护：按天数清理历史日志
+  - `TOKEN_HEALTHCHECK_INTERVAL_SECONDS`
+  - `TOKEN_HEALTHCHECK_TIMEOUT_MS`
+  - `TOKEN_HEALTHCHECK_CONCURRENCY`
+- 数据维护：按天数手动清理历史日志 + 可选自动清理
 
 ## 负载均衡策略
 
@@ -496,7 +500,7 @@ PORT=3000
 SESSION_SECRET=replace-with-strong-random-secret-min-32chars
 JWT_SECRET=replace-with-strong-random-secret-min-32chars
 ADMIN_USERNAME=admin
-ADMIN_PASSWORD=replace-with-strong-admin-password
+ADMIN_PASSWORD=Gpt2api@2026
 LOAD_BALANCE_STRATEGY=round-robin
 MODELS_FILE=./models.json
 DEFAULT_CODEX_MODEL=gpt-5-codex
@@ -504,6 +508,14 @@ API_KEY_DEFAULT_RPM_LIMIT=60
 MAX_CONCURRENT_PROXY_REQUESTS=100
 TOKEN_CIRCUIT_BREAKER_THRESHOLD=1
 TOKEN_COOLDOWN_MINUTES=10
+TOKEN_HEALTHCHECK_ENABLED=true
+TOKEN_HEALTHCHECK_INTERVAL_SECONDS=120
+TOKEN_HEALTHCHECK_TIMEOUT_MS=15000
+TOKEN_HEALTHCHECK_CONCURRENCY=3
+TOKEN_HEALTHCHECK_MAX_COOLDOWN_MINUTES=720
+API_LOG_AUTO_CLEANUP_ENABLED=true
+API_LOG_RETENTION_DAYS=30
+API_LOG_CLEANUP_INTERVAL_MINUTES=60
 ALLOW_ENV_FILE_UPDATES=true
 ENV_HOT_RELOAD=true
 EXPOSE_DETAILED_ERRORS=false
@@ -547,8 +559,8 @@ gpt2api-node/
 ## 注意事项
 
 1. **安全性**: 
-   - 生产环境必须配置高强度 `SESSION_SECRET`、`JWT_SECRET` 和 `ADMIN_PASSWORD`
-   - 首次登录后请立即修改管理员密码
+   - 生产环境必须配置高强度 `SESSION_SECRET`、`JWT_SECRET`、`ADMIN_USERNAME` 和 `ADMIN_PASSWORD`
+   - 若使用默认账号密码（`admin / Gpt2api@2026`），首次登录后请立即修改
    - 妥善保管 API Keys
    - 生产环境请使用 HTTPS
    - 默认允许管理后台在线写入 `.env` 并热更新；如需锁定配置，可设置 `ALLOW_ENV_FILE_UPDATES=false`

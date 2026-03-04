@@ -133,6 +133,19 @@ function parsePositiveInt(value, defaultValue, min = 1, max = Number.MAX_SAFE_IN
   return Math.min(Math.max(parsed, min), max);
 }
 
+function getApiLogRetentionDays() {
+  return parsePositiveInt(process.env.API_LOG_RETENTION_DAYS, 30, 1, 3650);
+}
+
+function getApiLogCleanupIntervalMinutes() {
+  return parsePositiveInt(process.env.API_LOG_CLEANUP_INTERVAL_MINUTES, 60, 10, 1440);
+}
+
+function isApiLogAutoCleanupEnabled() {
+  const raw = String(process.env.API_LOG_AUTO_CLEANUP_ENABLED || 'true').trim().toLowerCase();
+  return !['false', '0', 'no', 'off'].includes(raw);
+}
+
 // 初始化数据库
 initDatabase();
 
@@ -178,6 +191,19 @@ try {
 const tokenManagers = new Map();
 let currentTokenIndex = 0; // 轮询索引
 let inFlightProxyRequests = 0; // 当前代理并发数
+
+function buildManagerTokenData(token) {
+  return {
+    access_token: token.access_token,
+    refresh_token: token.refresh_token,
+    id_token: token.id_token,
+    account_id: token.account_id,
+    email: token.email,
+    expired_at: token.expired_at,
+    last_refresh_at: token.last_refresh_at,
+    type: 'codex'
+  };
+}
 
 function syncTokenManagerPayload(tokenId, tokenData) {
   if (!tokenManagers.has(tokenId)) {
@@ -234,25 +260,26 @@ function getAvailableTokenManager() {
   }
   
   if (!tokenManagers.has(token.id)) {
-    // 创建临时 token 文件
-    const tempTokenData = {
-      access_token: token.access_token,
-      refresh_token: token.refresh_token,
-      id_token: token.id_token,
-      account_id: token.account_id,
-      email: token.email,
-      expired_at: token.expired_at,
-      last_refresh_at: token.last_refresh_at,
-      type: 'codex'
-    };
+    // 创建进程内 token manager，避免磁盘读写
+    const tempTokenData = buildManagerTokenData(token);
     
-    // 使用内存中的 token 数据
     const manager = new TokenManager(null);
     manager.tokenData = tempTokenData;
     tokenManagers.set(token.id, { manager, tokenId: token.id });
   }
 
-  return tokenManagers.get(token.id);
+  const entry = tokenManagers.get(token.id);
+  if (!entry?.manager) {
+    throw new Error(`Token manager 不存在: ${token.id}`);
+  }
+
+  // Token 可能在后台被更新，选中时同步最新鉴权数据，避免使用陈旧 token
+  entry.manager.tokenData = {
+    ...(entry.manager.tokenData || {}),
+    ...buildManagerTokenData(token)
+  };
+
+  return entry;
 }
 
 function buildHealthPayload() {
@@ -365,19 +392,60 @@ async function handleProxyRequest(req, res, options) {
     }
 
     if (tokenId) {
-      Token.updateUsage(tokenId, success);
+      try {
+        Token.updateUsage(tokenId, success);
+      } catch (error) {
+        console.error('更新 token 使用统计失败:', error);
+      }
     }
 
-    ApiLog.create({
-      api_key_id: apiKeyId,
-      token_id: tokenId,
-      model,
-      endpoint,
-      status_code: statusCode,
-      response_time_ms: responseTimeMs,
-      error_message: success ? null : errorMessage
-    });
+    try {
+      ApiLog.create({
+        api_key_id: apiKeyId,
+        token_id: tokenId,
+        model,
+        endpoint,
+        status_code: statusCode,
+        response_time_ms: responseTimeMs,
+        error_message: success ? null : errorMessage
+      });
+    } catch (error) {
+      // 日志落库失败不应影响主请求稳定性
+      console.error('写入 API 日志失败:', error);
+    }
   }
+}
+
+function startApiLogCleanupScheduler() {
+  if (!isApiLogAutoCleanupEnabled()) {
+    console.log('ℹ API 日志自动清理已禁用');
+    return;
+  }
+
+  const retentionDays = getApiLogRetentionDays();
+  const intervalMinutes = getApiLogCleanupIntervalMinutes();
+  const intervalMs = intervalMinutes * 60 * 1000;
+
+  const runCleanup = () => {
+    try {
+      const deleted = ApiLog.cleanupOlderThanDays(retentionDays);
+      if (deleted > 0) {
+        console.log(`✓ API 日志自动清理完成：删除 ${deleted} 条（保留 ${retentionDays} 天）`);
+      }
+    } catch (error) {
+      console.error('API 日志自动清理失败:', error);
+    }
+  };
+
+  // 启动后先执行一次，尽快回收历史数据
+  runCleanup();
+
+  const timer = setInterval(runCleanup, intervalMs);
+  if (typeof timer.unref === 'function') {
+    timer.unref();
+  }
+
+  console.log(`✓ API 日志自动清理已启用：每 ${intervalMinutes} 分钟执行，保留最近 ${retentionDays} 天`);
 }
 
 // ==================== 管理后台路由 ====================
@@ -634,4 +702,5 @@ app.listen(PORT, () => {
   console.log('请确保已通过环境变量安全配置管理员账号与密钥\n');
 
   tokenHealthCheckScheduler.start(8000);
+  startApiLogCleanupScheduler();
 });
