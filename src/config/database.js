@@ -6,24 +6,78 @@ import fs from 'fs';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const dbPath = process.env.DATABASE_PATH || path.join(__dirname, '../../database/app.db');
+const DEFAULT_LOCAL_DB_PATH = path.join(__dirname, '../../database/app.db');
+const DEFAULT_VERCEL_DB_PATH = '/tmp/gpt2api-node/app.db';
 
-// 确保数据库目录存在
-const dbDir = path.dirname(dbPath);
-if (!fs.existsSync(dbDir)) {
-  fs.mkdirSync(dbDir, { recursive: true });
+function isVercelRuntime() {
+  return Boolean(process.env.VERCEL || process.env.VERCEL_ENV || process.env.NOW_REGION);
 }
 
-// 创建数据库连接
-const db = new Database(dbPath);
+function resolveDatabasePath() {
+  const configuredPath = String(process.env.DATABASE_PATH || '').trim();
+  if (configuredPath) {
+    // 兼容相对路径配置，统一解析到项目启动目录下
+    return path.isAbsolute(configuredPath) ? configuredPath : path.resolve(process.cwd(), configuredPath);
+  }
 
-// 启用外键约束
-db.pragma('foreign_keys = ON');
-// 优化 SQLite 在高并发读写下的稳定性与吞吐
-db.pragma('journal_mode = WAL');
-db.pragma('synchronous = NORMAL');
-db.pragma('busy_timeout = 5000');
-db.pragma('temp_store = MEMORY');
+  // Vercel Serverless 文件系统只允许写 /tmp，默认切换到可写目录
+  if (isVercelRuntime()) {
+    return DEFAULT_VERCEL_DB_PATH;
+  }
+
+  return DEFAULT_LOCAL_DB_PATH;
+}
+
+function ensureDatabaseDirectory(targetPath) {
+  const dbDir = path.dirname(targetPath);
+  if (!fs.existsSync(dbDir)) {
+    fs.mkdirSync(dbDir, { recursive: true });
+  }
+}
+
+function applyPragmas(database) {
+  // 启用外键约束
+  database.pragma('foreign_keys = ON');
+  // 优化 SQLite 在高并发读写下的稳定性与吞吐
+  database.pragma('journal_mode = WAL');
+  database.pragma('synchronous = NORMAL');
+  database.pragma('busy_timeout = 5000');
+  database.pragma('temp_store = MEMORY');
+}
+
+function createDatabase(targetPath) {
+  ensureDatabaseDirectory(targetPath);
+  const instance = new Database(targetPath);
+  applyPragmas(instance);
+  return instance;
+}
+
+function isReadonlySqliteError(error) {
+  if (!error) {
+    return false;
+  }
+  if (error.code === 'SQLITE_READONLY') {
+    return true;
+  }
+  return String(error.message || '').toUpperCase().includes('READONLY');
+}
+
+let dbPath = resolveDatabasePath();
+let db;
+
+try {
+  db = createDatabase(dbPath);
+} catch (error) {
+  // 部分平台会把项目目录挂为只读，此时自动回退到 /tmp 避免服务启动失败
+  const shouldFallbackToTmp = isReadonlySqliteError(error) && dbPath !== DEFAULT_VERCEL_DB_PATH;
+  if (!shouldFallbackToTmp) {
+    throw error;
+  }
+
+  dbPath = DEFAULT_VERCEL_DB_PATH;
+  console.warn(`⚠ 检测到 SQLite 路径只读，已自动切换到临时目录: ${dbPath}`);
+  db = createDatabase(dbPath);
+}
 
 // 初始化数据库表
 export function initDatabase() {
